@@ -65,7 +65,7 @@ map<string, string> jump = {
     {"JMP", "111"}
 };
 
-void registerSetup() {
+void symbolsSetup() {
     for (int i = 0; i < 16; i++) {
         string cur = "R" + to_string(i);
         symbols[cur] = i;
@@ -122,7 +122,7 @@ void parseLine(string line) {
 }
 
 int main(int argc, char** argv) {
-    registerSetup();
+    symbolsSetup();
 
     if (argc < 2) {
         cout << "You must specify the assembly code to parse.\n";
