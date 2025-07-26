@@ -139,7 +139,9 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    freopen("Prog.hack", "w", stdout);
+    string inputFile(argv[1]);
+    string name = inputFile.substr(0, inputFile.size() - 4);
+    freopen((name + ".hack").c_str(), "w", stdout);
 
     string cur;
     vector<string> preParsed;

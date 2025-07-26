@@ -17,6 +17,12 @@ map<string, commandTypes> commandToType = {
     {"and", C_ARITHMETIC},
     {"or", C_ARITHMETIC},
     {"not", C_ARITHMETIC},
+    {"label", C_LABEL},
+    {"goto", C_GOTO},
+    {"if-goto", C_IF},
+    {"function", C_FUNCTION},
+    {"return", C_RETURN},
+    {"call", C_CALL}
 };
 
 class Parser {
@@ -111,10 +117,10 @@ class CodeWriter {
             labelCnt = 0;
             name = fileName;
             freopen((name + ".asm").c_str(), "w", stdout);
-            cout << "// stack init\n@256\nD=A\n@SP\nM=D\n";
+            cout << "// bootstrap code\n@256\nD=A\n@SP\nM=D\n";
         }
         
-        void writeArithmetic(string command) {
+        void writeArithmetic(const string &command) {
             string codeToWrite = "// " + command + " command\n";
             if ((command == "neg") || (command == "not")) {
                 codeToWrite += "@SP\nA=M-1\n";
@@ -138,7 +144,7 @@ class CodeWriter {
             cout << codeToWrite;
         }
 
-        void writePushPop(commandTypes command, string segment, int index) {
+        void writePushPop(commandTypes command, const string &segment, int index) {
             string comment;
             if (command == C_PUSH) comment = "push";
             else comment = "pop";
@@ -167,6 +173,38 @@ class CodeWriter {
             }
             cout << codeToWrite;
         }
+
+        void writeLabel(const string &label) {
+            string codeToWrite = "// label " + label + "\n(" + label + ")\n";
+            cout << codeToWrite;
+        }
+
+        void writeGoto(const string &label) {
+            string codeToWrite = "// goto " + label + "\n@" + label + "\n0;JMP\n";
+            cout << codeToWrite;
+        }
+        
+        void writeIf(const string &label) {
+            string codeToWrite = "// if-goto" + label + "\n";
+            codeToWrite += "@SP\nAM=M-1\nD=M\n@" + label + "\nD;JNE\n";
+            cout << codeToWrite;
+        }
+
+        void writeFunction(const string &functionName, int nVars) {
+            string codeToWrite = "// function " + functionName + " " + to_string(nVars) + "\n";
+            codeToWrite += "(" + functionName + ")\n";
+            for (int i = 0; i < nVars; i++) codeToWrite += "@0\nD=A\n@SP\nA=M\nM=D\n@SP\nM=M+1\n";
+            cout << codeToWrite;
+        }
+
+        void writeCall(const string &functionName, int nArgs) {
+            string codeToWrite = "// call " + functionName + " " + to_string(nArgs) + "\n";
+            
+        }
+
+        void writeReturn() {
+            
+        }
 };
 
 int main(int argc, char** argv) {
@@ -185,7 +223,12 @@ int main(int argc, char** argv) {
         psr.advanceLine();
         if (!psr.getHasMoreLines()) break;
         auto commType = psr.getCommandType();
+
         if (commType == C_ARITHMETIC) cwr.writeArithmetic(psr.getFirstArg());
         else if ((commType == C_PUSH) || (commType == C_POP)) cwr.writePushPop(commType, psr.getFirstArg(), psr.getSecondArg());
+        else if (commType == C_LABEL) cwr.writeLabel(psr.getFirstArg());
+        else if (commType == C_GOTO) cwr.writeGoto(psr.getFirstArg());
+        else if (commType == C_IF) cwr.writeIf(psr.getFirstArg());
+        
     }
 }
