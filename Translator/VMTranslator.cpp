@@ -110,14 +110,15 @@ class Parser {
 
 class CodeWriter {
     private:
-        int labelCnt;
+        int labelCnt, callCnt;
         string name;
     public:
         CodeWriter(const string &fileName) {
             labelCnt = 0;
             name = fileName;
             freopen((name + ".asm").c_str(), "w", stdout);
-            cout << "// bootstrap code\n@256\nD=A\n@SP\nM=D\n";
+            //cout << "// bootstrap code\n@256\nD=A\n@SP\nM=D\n";
+            //writeCall("Sys.init", 0);
         }
         
         void writeArithmetic(const string &command) {
@@ -199,11 +200,33 @@ class CodeWriter {
 
         void writeCall(const string &functionName, int nArgs) {
             string codeToWrite = "// call " + functionName + " " + to_string(nArgs) + "\n";
-            
+            callCnt++;
+            string returnLabel = functionName + "$ret" + to_string(callCnt);
+            codeToWrite += "@" + returnLabel + "\n";
+            codeToWrite += "D=A\n@SP\nA=M\nM=D\n@SP\nM=M-1\n";
+            codeToWrite += "@LCL\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M-1\n";
+            codeToWrite += "@ARG\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M-1\n";
+            codeToWrite += "@THIS\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M-1\n";
+            codeToWrite += "@THAT\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M-1\n";
+            codeToWrite += "@" + to_string(nArgs + 5) + "\nD=A\n@SP\nD=M-D\n@ARG\nM=D\n";
+            codeToWrite += "@SP\nD=M\n@LCL\nM=D\n";
+            codeToWrite += "@" + functionName + "\n0;JMP\n";
+            codeToWrite += "(" + returnLabel + ")\n";
+            cout << codeToWrite;
         }
 
         void writeReturn() {
-            
+            string codeToWrite = "// return\n";
+            codeToWrite += "@LCL\nD=M\n@13\nM=D\n";
+            codeToWrite += "@5\nA=D-A\nD=M\n@14\nM=D\n";
+            codeToWrite += "@SP\nAM=M-1\nD=M\n@ARG\nA=M\nM=D\n";
+            codeToWrite += "D=A\n@SP\nM=D+1\n";
+            codeToWrite += "@13\nAM=M-1\nD=M\n@THAT\nM=D\n";
+            codeToWrite += "@13\nAM=M-1\nD=M\n@THIS\nM=D\n";
+            codeToWrite += "@13\nAM=M-1\nD=M\n@ARG\nM=D\n";
+            codeToWrite += "@13\nAM=M-1\nD=M\n@LCL\nM=D\n";
+            codeToWrite += "@14\nA=M\n0;JMP\n";
+            cout << codeToWrite;
         }
 };
 
@@ -229,6 +252,8 @@ int main(int argc, char** argv) {
         else if (commType == C_LABEL) cwr.writeLabel(psr.getFirstArg());
         else if (commType == C_GOTO) cwr.writeGoto(psr.getFirstArg());
         else if (commType == C_IF) cwr.writeIf(psr.getFirstArg());
-        
+        else if (commType == C_FUNCTION) cwr.writeFunction(psr.getFirstArg(), psr.getSecondArg());
+        else if (commType == C_CALL) cwr.writeCall(psr.getFirstArg(), psr.getSecondArg());
+        else if (commType == C_RETURN) cwr.writeReturn();
     }
 }
