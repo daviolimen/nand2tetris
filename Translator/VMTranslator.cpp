@@ -31,6 +31,7 @@ class Parser {
         commandTypes commandType;
         string currentCommand, firstArg;
         int secondArg;
+        ifstream fileStream;
 
         void trimString(string& s) {
             int start = s.find_first_not_of(" \t\n\r\f\v");
@@ -42,8 +43,10 @@ class Parser {
 
     public:
         Parser(const string& inputFile) {
-            if (!freopen(inputFile.c_str(), "r", stdin)) {
-                cout << "File specified could not be found.\n";
+            fileStream.open(inputFile);
+            if (!fileStream) {
+                cout << "Could not find the file specified\n";
+                hasMoreLines = 0;
                 return;
             }
             hasMoreLines = 1;
@@ -51,7 +54,7 @@ class Parser {
     
         void advanceLine() {
             bool ok = 0;
-            while (getline(cin, currentCommand)) {
+            while (getline(fileStream, currentCommand)) {
                 ok = 1;
                 currentCommand = currentCommand.substr(0, currentCommand.find("//"));
                 trimString(currentCommand);
@@ -115,10 +118,18 @@ class CodeWriter {
     public:
         CodeWriter(const string &fileName) {
             labelCnt = 0;
-            name = fileName;
+            callCnt = 0;
+            setFileName(fileName);
             freopen((name + ".asm").c_str(), "w", stdout);
-            //cout << "// bootstrap code\n@256\nD=A\n@SP\nM=D\n";
-            //writeCall("Sys.init", 0);
+        }
+
+        void setFileName(const string &fileName) {
+            name = fileName;
+        }
+
+        void writeInit() {
+            cout << "// bootstrap code\n@256\nD=A\n@SP\nM=D\n";
+            writeCall("Sys.init", 0);
         }
         
         void writeArithmetic(const string &command) {
@@ -203,11 +214,11 @@ class CodeWriter {
             callCnt++;
             string returnLabel = functionName + "$ret" + to_string(callCnt);
             codeToWrite += "@" + returnLabel + "\n";
-            codeToWrite += "D=A\n@SP\nA=M\nM=D\n@SP\nM=M-1\n";
-            codeToWrite += "@LCL\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M-1\n";
-            codeToWrite += "@ARG\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M-1\n";
-            codeToWrite += "@THIS\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M-1\n";
-            codeToWrite += "@THAT\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M-1\n";
+            codeToWrite += "D=A\n@SP\nA=M\nM=D\n@SP\nM=M+1\n";
+            codeToWrite += "@LCL\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n";
+            codeToWrite += "@ARG\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n";
+            codeToWrite += "@THIS\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n";
+            codeToWrite += "@THAT\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n";
             codeToWrite += "@" + to_string(nArgs + 5) + "\nD=A\n@SP\nD=M-D\n@ARG\nM=D\n";
             codeToWrite += "@SP\nD=M\n@LCL\nM=D\n";
             codeToWrite += "@" + functionName + "\n0;JMP\n";
@@ -236,24 +247,46 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    string inputFile(argv[1]);
-    string name = inputFile.substr(0, inputFile.size() - 3);
+    string inputString(argv[1]);
+    string name;
 
-    Parser psr(inputFile);
-    CodeWriter cwr(name);
-
-    while (true) {
-        psr.advanceLine();
-        if (!psr.getHasMoreLines()) break;
-        auto commType = psr.getCommandType();
-
-        if (commType == C_ARITHMETIC) cwr.writeArithmetic(psr.getFirstArg());
-        else if ((commType == C_PUSH) || (commType == C_POP)) cwr.writePushPop(commType, psr.getFirstArg(), psr.getSecondArg());
-        else if (commType == C_LABEL) cwr.writeLabel(psr.getFirstArg());
-        else if (commType == C_GOTO) cwr.writeGoto(psr.getFirstArg());
-        else if (commType == C_IF) cwr.writeIf(psr.getFirstArg());
-        else if (commType == C_FUNCTION) cwr.writeFunction(psr.getFirstArg(), psr.getSecondArg());
-        else if (commType == C_CALL) cwr.writeCall(psr.getFirstArg(), psr.getSecondArg());
-        else if (commType == C_RETURN) cwr.writeReturn();
+    if (inputString.rfind(".vm") != string::npos) {
+        name = inputString.substr(0, inputString.size() - 3);
+        Parser psr(inputString);
+        CodeWriter cwr(name);
+        
+        while (true) {
+            psr.advanceLine();
+            if (!psr.getHasMoreLines()) break;
+            auto commType = psr.getCommandType();
+            if (commType == C_ARITHMETIC) cwr.writeArithmetic(psr.getFirstArg());
+            else if ((commType == C_PUSH) || (commType == C_POP)) cwr.writePushPop(commType, psr.getFirstArg(), psr.getSecondArg());
+            else if (commType == C_LABEL) cwr.writeLabel(psr.getFirstArg());
+            else if (commType == C_GOTO) cwr.writeGoto(psr.getFirstArg());
+            else if (commType == C_IF) cwr.writeIf(psr.getFirstArg());
+            else if (commType == C_FUNCTION) cwr.writeFunction(psr.getFirstArg(), psr.getSecondArg());
+            else if (commType == C_CALL) cwr.writeCall(psr.getFirstArg(), psr.getSecondArg());
+            else if (commType == C_RETURN) cwr.writeReturn();
+        }
+    } else {
+        CodeWriter cwr(inputString);
+        cwr.writeInit();
+        for (const auto& entry : filesystem::directory_iterator(inputString)) {
+            Parser psr(entry.path().string());
+            cwr.setFileName(entry.path().stem().string());
+            while (true) {
+                psr.advanceLine();
+                if (!psr.getHasMoreLines()) break;
+                auto commType = psr.getCommandType();
+                if (commType == C_ARITHMETIC) cwr.writeArithmetic(psr.getFirstArg());
+                else if ((commType == C_PUSH) || (commType == C_POP)) cwr.writePushPop(commType, psr.getFirstArg(), psr.getSecondArg());
+                else if (commType == C_LABEL) cwr.writeLabel(psr.getFirstArg());
+                else if (commType == C_GOTO) cwr.writeGoto(psr.getFirstArg());
+                else if (commType == C_IF) cwr.writeIf(psr.getFirstArg());
+                else if (commType == C_FUNCTION) cwr.writeFunction(psr.getFirstArg(), psr.getSecondArg());
+                else if (commType == C_CALL) cwr.writeCall(psr.getFirstArg(), psr.getSecondArg());
+                else if (commType == C_RETURN) cwr.writeReturn();
+            }
+        }
     }
 }
